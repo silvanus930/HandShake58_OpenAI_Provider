@@ -42,14 +42,36 @@ npm run dev
 | `RATE_LIMIT_WINDOW_MS` | No | Rate limit window in ms (default: 60000) |
 | `REDIS_URL` | No | Optional Redis URL for caching |
 | `MARKETPLACE_URL` | No | Handshake58 marketplace URL |
+| `TELEGRAM_BOT_TOKEN` | No | Bot token for traffic notifications |
+| `TELEGRAM_CHAT_ID` | No | Chat ID to receive notifications |
+
+## Monitoring
+
+### Telegram traffic notifications
+
+Get push notifications on your phone when paid traffic occurs. Messages are batched (every 60s or 10 requests) to avoid spam.
+
+1. Create a bot: message [@BotFather](https://t.me/BotFather) → `/newbot`
+2. Get your chat ID: message [@userinfobot](https://t.me/userinfobot)
+3. Set env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+
+### Other options
+
+| Tool | Purpose |
+|------|---------|
+| [UptimeRobot](https://uptimerobot.com) | Free uptime monitoring, alerts on downtime |
+| [Better Uptime](https://betteruptime.com) | Uptime + incident management |
+| [Healthchecks.io](https://healthchecks.io) | Cron job pings, alerts if missed |
+| Railway metrics | Built-in if deployed on Railway |
+| `GET /health` | Manual or automated health checks |
 
 ## Available Services
 
 | Service | Route | Method | Description |
 |---------|-------|--------|-------------|
-| AI Research | `/research` | POST | AI-powered research queries |
-| Document Analysis | `/document` | POST | PDF analysis and insight extraction |
-| Data Extraction | `/extract` | POST | Web page extraction (static + dynamic) |
+| AI Research | `/v1/research` | POST | AI-powered research queries |
+| Document Analysis | `/v1/document` | POST | PDF analysis and insight extraction |
+| Data Extraction | `/v1/extract` | POST | Web page extraction (static + dynamic) |
 
 Discover services programmatically: `GET /services`
 
@@ -57,7 +79,7 @@ Discover services programmatically: `GET /services`
 
 ### Research
 ```bash
-curl -X POST http://localhost:3000/research \
+curl -X POST http://localhost:3000/v1/research \
   -H "Content-Type: application/json" \
   -H "X-DRAIN-Voucher: '{\"channelId\":\"...\",\"amount\":\"...\",\"nonce\":\"...\",\"signature\":\"...\"}'" \
   -d '{"query": "AI regulation in Europe"}'
@@ -65,14 +87,14 @@ curl -X POST http://localhost:3000/research \
 
 ### Document Analysis
 ```bash
-curl -X POST http://localhost:3000/document \
+curl -X POST http://localhost:3000/v1/document \
   -H "X-DRAIN-Voucher: '{\"channelId\":\"...\",\"amount\":\"...\",\"nonce\":\"...\",\"signature\":\"...\"}'" \
   -F "file=@document.pdf"
 ```
 
 ### Web Extraction
 ```bash
-curl -X POST http://localhost:3000/extract \
+curl -X POST http://localhost:3000/v1/extract \
   -H "Content-Type: application/json" \
   -H "X-DRAIN-Voucher: '{\"channelId\":\"...\",\"amount\":\"...\",\"nonce\":\"...\",\"signature\":\"...\"}'" \
   -d '{"url": "https://example.com"}'
@@ -109,9 +131,9 @@ Response:
 | `GET /v1/models` | List models |
 | `GET /v1/pricing` | View pricing |
 | `POST /v1/chat/completions` | OpenAI-compatible chat (requires X-DRAIN-Voucher) |
-| `POST /research` | AI research (requires X-DRAIN-Voucher) |
-| `POST /document` | Document analysis (requires X-DRAIN-Voucher) |
-| `POST /extract` | Web extraction (requires X-DRAIN-Voucher) |
+| `POST /v1/research` | AI research (requires X-DRAIN-Voucher) |
+| `POST /v1/document` | Document analysis (requires X-DRAIN-Voucher) |
+| `POST /v1/extract` | Web extraction (requires X-DRAIN-Voucher) |
 
 ## Deployment
 

@@ -11,6 +11,7 @@ import type { ProviderConfig } from '../types.js';
 import { getPaymentHeaders } from '../constants.js';
 import { calculateCost, getModelPricing, isModelSupported, getSupportedModels } from '../config.js';
 import { withOpenAIRetry } from '../lib/openaiClient.js';
+import { notifyTraffic } from '../lib/telegram.js';
 
 export function createChatRoute(drainService: DrainService, config: ProviderConfig, openai: OpenAI) {
   return async function chatHandler(req: Request, res: Response): Promise<void> {
@@ -140,6 +141,7 @@ export function createChatRoute(drainService: DrainService, config: ProviderConf
             if (recheck.valid) {
               drainService.storeVoucher(voucher, channelState, cost);
               voucherStored = true;
+              notifyTraffic('/v1/chat/completions', cost);
               console.log(`[drain] chat drained ${cost} USDC (stream interrupted)`);
             }
           }
@@ -152,6 +154,7 @@ export function createChatRoute(drainService: DrainService, config: ProviderConf
         const actualCost = calculateCost(pricing, inputTokens, outputTokens);
         drainService.storeVoucher(voucher, channelState, actualCost);
         voucherStored = true;
+        notifyTraffic('/v1/chat/completions', actualCost);
         console.log(`[drain] chat drained ${actualCost} USDC`);
 
         const total = channelState.totalCharged;
@@ -191,6 +194,7 @@ export function createChatRoute(drainService: DrainService, config: ProviderConf
         }
 
         drainService.storeVoucher(voucher, actualValidation.channel!, actualCost);
+        notifyTraffic('/v1/chat/completions', actualCost);
         console.log(`[drain] chat drained ${actualCost} USDC`);
 
         const total = actualValidation.channel!.totalCharged;

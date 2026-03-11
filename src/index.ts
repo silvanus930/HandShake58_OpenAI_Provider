@@ -19,6 +19,7 @@ import { createExtractionRoute } from './routes/extractionRoute.js';
 import { createChatRoute } from './routes/chatRoute.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './docs/swagger.js';
+import { initTelegram, notifyStartup, notifyVisit } from './lib/telegram.js';
 
 // Load configuration
 const config = loadConfig();
@@ -52,10 +53,12 @@ app.use((req, res, next) => {
       statusCode: res.statusCode,
       executionTime: `${executionTime}ms`,
     };
-    if (res.getHeader('X-DRAIN-Cost')) {
-      logData.price = res.getHeader('X-DRAIN-Cost');
-    }
+    const costHeader = res.getHeader('X-DRAIN-Cost');
+    if (costHeader) logData.price = costHeader;
     console.log(JSON.stringify(logData));
+    if (req.method === 'GET' && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 304)) {
+      notifyVisit(req.path);
+    }
   });
   next();
 });
@@ -333,14 +336,16 @@ app.post('/v1/admin/refresh-models', async (req, res) => {
 
 // Start server
 async function start() {
+  initTelegram();
   await loadModels(config.openaiApiKey, config.markup, config.marketplaceUrl);
-  
+
   // Start auto-claim
   drainService.startAutoClaim(config.autoClaimIntervalMinutes, config.autoClaimBufferSeconds);
   
   app.listen(config.port, config.host, () => {
     console.log(`${config.providerName} | ${getSupportedModels().length} models | ${(config.markup - 1) * 100}% markup | http://${config.host}:${config.port}`);
     console.log(`Auto-claim active: checking every ${config.autoClaimIntervalMinutes}min, buffer ${config.autoClaimBufferSeconds}s`);
+    notifyStartup(config.providerName, getSupportedModels().length, config.port, config.host);
   });
 }
 
