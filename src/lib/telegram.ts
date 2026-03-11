@@ -4,14 +4,33 @@
  * Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to enable.
  */
 
+import type { Request } from 'express';
+
 const BATCH_INTERVAL_MS = 60_000; // 1 minute (paid traffic)
 const VISIT_BATCH_INTERVAL_MS = 5_000; // 5 seconds (GET visits - faster for browser testing)
 const MAX_BATCH_SIZE = 10;
 
+export function getClientIp(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const first = typeof forwarded === 'string' ? forwarded.split(',')[0] : forwarded[0];
+    return first?.trim() ?? 'unknown';
+  }
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) return (typeof realIp === 'string' ? realIp : realIp[0]) ?? 'unknown';
+  return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+}
+
 interface TrafficEvent {
   route: string;
   cost: bigint;
+  ip: string;
   at: number;
+}
+
+interface VisitEvent {
+  path: string;
+  ip: string;
 }
 
 let botToken: string | null = null;
@@ -19,7 +38,7 @@ let chatId: string | null = null;
 let buffer: TrafficEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-const visitBuffer: string[] = [];
+const visitBuffer: VisitEvent[] = [];
 let visitFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function initTelegram(): void {
@@ -56,10 +75,10 @@ export async function notifyStartup(providerName: string, modelsCount: number, p
   }
 }
 
-export function notifyTraffic(route: string, cost: bigint): void {
+export function notifyTraffic(route: string, cost: bigint, ip: string = 'unknown'): void {
   if (!botToken || !chatId) return;
 
-  buffer.push({ route, cost, at: Date.now() });
+  buffer.push({ route, cost, ip, at: Date.now() });
 
   if (buffer.length >= MAX_BATCH_SIZE) {
     flush();
@@ -68,10 +87,10 @@ export function notifyTraffic(route: string, cost: bigint): void {
   }
 }
 
-export function notifyVisit(path: string): void {
+export function notifyVisit(path: string, ip: string = 'unknown'): void {
   if (!botToken || !chatId) return;
 
-  visitBuffer.push(path);
+  visitBuffer.push({ path, ip });
 
   if (visitBuffer.length >= MAX_BATCH_SIZE) {
     flushVisits();
@@ -87,18 +106,20 @@ async function flushVisits(): Promise<void> {
   }
   if (visitBuffer.length === 0) return;
 
-  const paths = [...visitBuffer];
+  const events = [...visitBuffer];
   visitBuffer.length = 0;
 
-  const counts = paths.reduce((acc, p) => {
-    acc[p] = (acc[p] ?? 0) + 1;
+  const pathCounts = events.reduce((acc, e) => {
+    acc[e.path] = (acc[e.path] ?? 0) + 1;
     return acc;
   }, {} as Record<string, number>);
-  const summary = Object.entries(counts)
+  const pathSummary = Object.entries(pathCounts)
     .map(([p, n]) => `${p} (${n})`)
     .join(', ');
-  const msg = `📊 *Visits* (${paths.length} request${paths.length > 1 ? 's' : ''})\n` +
-    `📍 ${summary}`;
+  const ips = [...new Set(events.map((e) => e.ip))].join(', ');
+  const msg = `📊 *Visits* (${events.length} request${events.length > 1 ? 's' : ''})\n` +
+    `📍 ${pathSummary}\n` +
+    `🖥 ${ips}`;
 
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -128,9 +149,11 @@ async function flush(): Promise<void> {
   const totalCost = events.reduce((s, e) => s + e.cost, 0n);
   const usdc = Number(totalCost) / 1_000_000;
   const routes = [...new Set(events.map((e) => e.route))].join(', ');
+  const ips = [...new Set(events.map((e) => e.ip))].join(', ');
   const msg = `🚀 *Traffic* (${events.length} request${events.length > 1 ? 's' : ''})\n` +
     `💰 ${usdc.toFixed(4)} USDC\n` +
-    `📍 ${routes}`;
+    `📍 ${routes}\n` +
+    `🖥 ${ips}`;
 
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {

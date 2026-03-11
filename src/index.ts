@@ -19,7 +19,7 @@ import { createExtractionRoute } from './routes/extractionRoute.js';
 import { createChatRoute } from './routes/chatRoute.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './docs/swagger.js';
-import { initTelegram, notifyStartup, notifyVisit } from './lib/telegram.js';
+import { initTelegram, notifyStartup, notifyVisit, getClientIp } from './lib/telegram.js';
 
 // Load configuration
 const config = loadConfig();
@@ -35,6 +35,7 @@ const openai = new OpenAI({
 
 // Create Express app
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
 
 const limiter = rateLimit({
@@ -57,7 +58,7 @@ app.use((req, res, next) => {
     if (costHeader) logData.price = costHeader;
     console.log(JSON.stringify(logData));
     if (req.method === 'GET' && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 304)) {
-      notifyVisit(req.path);
+      notifyVisit(req.path, getClientIp(req));
     }
   });
   next();

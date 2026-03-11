@@ -10,7 +10,7 @@ import type { DrainService } from '../drain.js';
 import type { ProviderConfig } from '../types.js';
 import { getPaymentHeaders } from '../constants.js';
 import { calculateProviderPrice } from '../pricing/pricingEngine.js';
-import { notifyTraffic } from '../lib/telegram.js';
+import { notifyTraffic, getClientIp } from '../lib/telegram.js';
 
 export function createResearchRoute(drainService: DrainService, config: ProviderConfig) {
   return async function researchHandler(req: Request, res: Response): Promise<void> {
@@ -90,7 +90,7 @@ export function createResearchRoute(drainService: DrainService, config: Provider
       }
 
       drainService.storeVoucher(voucher, actualValidation.channel!, cost);
-      notifyTraffic('/v1/research', cost);
+      notifyTraffic('/v1/research', cost, getClientIp(req));
       const total = actualValidation.channel!.totalCharged;
       const remaining = actualValidation.channel!.deposit - total;
 
