@@ -1,48 +1,64 @@
 /**
  * Data Extraction Provider Route
  * POST /extract (requires X-DRAIN-Voucher)
- *
- * @openapi
- * /extract:
- *   post:
- *     summary: Web page extraction
- *     description: Extracts structured data from a URL. Supports static and JS-rendered pages. Requires X-DRAIN-Voucher.
- *     tags:
- *       - Services
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - url
- *             properties:
- *               url:
- *                 type: string
- *                 format: uri
- *                 description: URL to extract content from
- *     responses:
- *       200:
- *         description: Extraction result
- *       400:
- *         description: Invalid URL
- *       402:
- *         description: Payment required
- *       422:
- *         description: Content could not be extracted
- *       500:
- *         description: Service error
+ * Inline auth logic: voucher check → parse → estimate → validate
  */
 
-import { Router, type Request, type Response } from 'express';
+import type { Request, Response } from 'express';
 import { extractFromUrl } from '../services/extractionService.js';
 import type { DrainService } from '../drain.js';
+import type { ProviderConfig } from '../types.js';
+import { getPaymentHeaders } from '../constants.js';
+import { calculateProviderPrice } from '../pricing/pricingEngine.js';
 
-export function createExtractionRoute(drainService: DrainService) {
-  const router = Router();
+export function createExtractionRoute(drainService: DrainService, config: ProviderConfig) {
+  return async function extractionHandler(req: Request, res: Response): Promise<void> {
+    const voucherHeader = req.headers['x-drain-voucher'] as string | undefined;
 
-  router.post('/', async (req: Request, res: Response) => {
+    if (!voucherHeader) {
+      res.status(402).set(getPaymentHeaders(drainService.getProviderAddress(), config.chainId)).json({
+        error: {
+          message: 'X-DRAIN-Voucher header required',
+          type: 'payment_required',
+          code: 'voucher_required',
+        },
+      });
+      return;
+    }
+
+    const voucher = drainService.parseVoucherHeader(voucherHeader);
+    if (!voucher) {
+      res.status(402).set({ 'X-DRAIN-Error': 'invalid_voucher_format' }).json({
+        error: {
+          message: 'Invalid X-DRAIN-Voucher format',
+          type: 'payment_required',
+          code: 'invalid_voucher_format',
+        },
+      });
+      return;
+    }
+
+    const { price } = calculateProviderPrice('extract');
+    const estimatedCost = BigInt(Math.ceil(price * 1_000_000));
+
+    const validation = await drainService.validateVoucher(voucher, estimatedCost);
+
+    if (!validation.valid) {
+      const errorHeaders: Record<string, string> = { 'X-DRAIN-Error': validation.error! };
+      if (validation.error === 'insufficient_funds' && validation.channel) {
+        errorHeaders['X-DRAIN-Required'] = estimatedCost.toString();
+        errorHeaders['X-DRAIN-Provided'] = (BigInt(voucher.amount) - validation.channel.totalCharged).toString();
+      }
+      res.status(402).set(errorHeaders).json({
+        error: {
+          message: `Payment validation failed: ${validation.error}`,
+          type: 'payment_required',
+          code: validation.error,
+        },
+      });
+      return;
+    }
+
     try {
       const { url } = req.body ?? {};
       if (!url || typeof url !== 'string') {
@@ -51,6 +67,7 @@ export function createExtractionRoute(drainService: DrainService) {
         });
         return;
       }
+
       let parsed: URL;
       try {
         parsed = new URL(url);
@@ -60,6 +77,7 @@ export function createExtractionRoute(drainService: DrainService) {
         });
         return;
       }
+
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         res.status(400).json({
           error: { message: 'Only http/https URLs are allowed', code: 'invalid_request' },
@@ -70,26 +88,40 @@ export function createExtractionRoute(drainService: DrainService) {
       const result = await extractFromUrl(parsed.href);
 
       if ('error' in result && result.error) {
-        return res.status(422).json(result);
+        res.status(422).json(result);
+        return;
       }
 
-      if (req.drainVoucher && req.drainChannelState) {
-        const price = result.pricing?.price ?? 0;
-        const cost = BigInt(Math.ceil(price * 1_000_000));
-        drainService.storeVoucher(req.drainVoucher, req.drainChannelState, cost);
-        const total = req.drainChannelState.totalCharged + cost;
-        const remaining = req.drainChannelState.deposit - total;
-        res.set({
-          'X-DRAIN-Cost': cost.toString(),
-          'X-DRAIN-Total': total.toString(),
-          'X-DRAIN-Remaining': remaining.toString(),
-          'X-Provider-Speed': 'fast',
+      const actualPrice = result.pricing?.price ?? 0;
+      const cost = BigInt(Math.ceil(actualPrice * 1_000_000));
+
+      const actualValidation = await drainService.validateVoucher(voucher, cost);
+      if (!actualValidation.valid) {
+        res.status(402).set({
+          'X-DRAIN-Error': actualValidation.error ?? 'insufficient_funds_post',
+          'X-DRAIN-Required': cost.toString(),
+        }).json({
+          error: {
+            message: `Payment insufficient for actual cost: ${actualValidation.error}`,
+            type: 'payment_required',
+            code: actualValidation.error ?? 'insufficient_funds_post',
+          },
         });
-        console.log(`[drain] extract drained ${cost} USDC`);
+        return;
       }
 
-      if (!res.getHeader('X-Provider-Speed')) res.setHeader('X-Provider-Speed', 'fast');
-      res.json(result);
+      drainService.storeVoucher(voucher, actualValidation.channel!, cost);
+      const total = actualValidation.channel!.totalCharged;
+      const remaining = actualValidation.channel!.deposit - total;
+
+      res.set({
+        'X-DRAIN-Cost': cost.toString(),
+        'X-DRAIN-Total': total.toString(),
+        'X-DRAIN-Remaining': remaining.toString(),
+        'X-Provider-Speed': 'fast',
+      }).json(result);
+
+      console.log(`[drain] extract drained ${cost} USDC`);
     } catch (err) {
       console.error('[extract]', err);
       const message = err instanceof Error ? err.message : 'Extraction failed';
@@ -97,7 +129,5 @@ export function createExtractionRoute(drainService: DrainService) {
         error: { message, code: 'extraction_error' },
       });
     }
-  });
-
-  return router;
+  };
 }

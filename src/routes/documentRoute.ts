@@ -1,46 +1,64 @@
 /**
  * Document Analysis Provider Route
  * POST /document (multipart/form-data, requires X-DRAIN-Voucher)
- *
- * @openapi
- * /document:
- *   post:
- *     summary: Document analysis
- *     description: Analyzes PDF document and extracts insights. Requires X-DRAIN-Voucher. Send as multipart/form-data.
- *     tags:
- *       - Services
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required:
- *               - file
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *                 description: PDF file
- *     responses:
- *       200:
- *         description: Document analysis result
- *       400:
- *         description: Invalid request (PDF required)
- *       402:
- *         description: Payment required
- *       500:
- *         description: Service error
+ * Inline auth logic: voucher check → parse → estimate → validate
  */
 
-import { Router, type Request, type Response } from 'express';
+import type { Request, Response } from 'express';
 import { analyzeDocument } from '../services/documentService.js';
 import type { DrainService } from '../drain.js';
+import type { ProviderConfig } from '../types.js';
+import { getPaymentHeaders } from '../constants.js';
+import { calculateProviderPrice } from '../pricing/pricingEngine.js';
 
-export function createDocumentRoute(drainService: DrainService) {
-  const router = Router();
+export function createDocumentRoute(drainService: DrainService, config: ProviderConfig) {
+  return async function documentHandler(req: Request, res: Response): Promise<void> {
+    const voucherHeader = req.headers['x-drain-voucher'] as string | undefined;
 
-  router.post('/', async (req: Request, res: Response) => {
+    if (!voucherHeader) {
+      res.status(402).set(getPaymentHeaders(drainService.getProviderAddress(), config.chainId)).json({
+        error: {
+          message: 'X-DRAIN-Voucher header required',
+          type: 'payment_required',
+          code: 'voucher_required',
+        },
+      });
+      return;
+    }
+
+    const voucher = drainService.parseVoucherHeader(voucherHeader);
+    if (!voucher) {
+      res.status(402).set({ 'X-DRAIN-Error': 'invalid_voucher_format' }).json({
+        error: {
+          message: 'Invalid X-DRAIN-Voucher format',
+          type: 'payment_required',
+          code: 'invalid_voucher_format',
+        },
+      });
+      return;
+    }
+
+    const { price } = calculateProviderPrice('document');
+    const estimatedCost = BigInt(Math.ceil(price * 1_000_000));
+
+    const validation = await drainService.validateVoucher(voucher, estimatedCost);
+
+    if (!validation.valid) {
+      const errorHeaders: Record<string, string> = { 'X-DRAIN-Error': validation.error! };
+      if (validation.error === 'insufficient_funds' && validation.channel) {
+        errorHeaders['X-DRAIN-Required'] = estimatedCost.toString();
+        errorHeaders['X-DRAIN-Provided'] = (BigInt(voucher.amount) - validation.channel.totalCharged).toString();
+      }
+      res.status(402).set(errorHeaders).json({
+        error: {
+          message: `Payment validation failed: ${validation.error}`,
+          type: 'payment_required',
+          code: validation.error,
+        },
+      });
+      return;
+    }
+
     try {
       const file = req.file;
       if (!file || !file.buffer) {
@@ -55,23 +73,36 @@ export function createDocumentRoute(drainService: DrainService) {
 
       const result = await analyzeDocument(file.buffer);
 
-      if (req.drainVoucher && req.drainChannelState) {
-        const price = result.pricing?.price ?? 0;
-        const cost = BigInt(Math.ceil(price * 1_000_000));
-        drainService.storeVoucher(req.drainVoucher, req.drainChannelState, cost);
-        const total = req.drainChannelState.totalCharged + cost;
-        const remaining = req.drainChannelState.deposit - total;
-        res.set({
-          'X-DRAIN-Cost': cost.toString(),
-          'X-DRAIN-Total': total.toString(),
-          'X-DRAIN-Remaining': remaining.toString(),
-          'X-Provider-Speed': 'fast',
+      const actualPrice = result.pricing?.price ?? 0;
+      const cost = BigInt(Math.ceil(actualPrice * 1_000_000));
+
+      const actualValidation = await drainService.validateVoucher(voucher, cost);
+      if (!actualValidation.valid) {
+        res.status(402).set({
+          'X-DRAIN-Error': actualValidation.error ?? 'insufficient_funds_post',
+          'X-DRAIN-Required': cost.toString(),
+        }).json({
+          error: {
+            message: `Payment insufficient for actual cost: ${actualValidation.error}`,
+            type: 'payment_required',
+            code: actualValidation.error ?? 'insufficient_funds_post',
+          },
         });
-        console.log(`[drain] document drained ${cost} USDC`);
+        return;
       }
 
-      if (!res.getHeader('X-Provider-Speed')) res.setHeader('X-Provider-Speed', 'fast');
-      res.json(result);
+      drainService.storeVoucher(voucher, actualValidation.channel!, cost);
+      const total = actualValidation.channel!.totalCharged;
+      const remaining = actualValidation.channel!.deposit - total;
+
+      res.set({
+        'X-DRAIN-Cost': cost.toString(),
+        'X-DRAIN-Total': total.toString(),
+        'X-DRAIN-Remaining': remaining.toString(),
+        'X-Provider-Speed': 'fast',
+      }).json(result);
+
+      console.log(`[drain] document drained ${cost} USDC`);
     } catch (err) {
       console.error('[document]', err);
       const message = err instanceof Error ? err.message : 'Document analysis failed';
@@ -79,7 +110,5 @@ export function createDocumentRoute(drainService: DrainService) {
         error: { message, code: 'document_error' },
       });
     }
-  });
-
-  return router;
+  };
 }

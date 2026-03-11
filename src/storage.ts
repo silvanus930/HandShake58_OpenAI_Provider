@@ -192,6 +192,17 @@ export class VoucherStorage {
   }
 
   /**
+   * Get total earned (sum of totalCharged across all channels)
+   */
+  getTotalEarned(): bigint {
+    let total = 0n;
+    for (const channel of Object.values(this.data.channels)) {
+      total += BigInt(channel.totalCharged ?? 0);
+    }
+    return total;
+  }
+
+  /**
    * Get stats
    */
   getStats(): {
@@ -204,7 +215,7 @@ export class VoucherStorage {
       totalVouchers: this.data.vouchers.length,
       unclaimedVouchers: this.data.vouchers.filter(v => !v.claimed).length,
       activeChannels: Object.keys(this.data.channels).length,
-      totalEarned: BigInt(this.data.totalEarned),
+      totalEarned: this.getTotalEarned(),
     };
   }
 }
