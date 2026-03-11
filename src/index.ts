@@ -74,9 +74,9 @@ const documentUpload = multer({
 });
 
 // Inline auth logic: voucher check → parse → estimate → validate
-app.post('/research', createResearchRoute(drainService, config));
-app.post('/document', documentUpload.single('file'), createDocumentRoute(drainService, config));
-app.post('/extract', createExtractionRoute(drainService, config));
+app.post('/v1/research', createResearchRoute(drainService, config));
+app.post('/v1/document', documentUpload.single('file'), createDocumentRoute(drainService, config));
+app.post('/v1/extract', createExtractionRoute(drainService, config));
 app.post('/v1/chat/completions', createChatRoute(drainService, config, openai));
 
 app.get('/metadata', (_req, res) => {
@@ -113,7 +113,7 @@ app.get('/services', (_req, res) => {
 
 app.get('/v1/docs', (req, res) => {
   const models = [...getSupportedModels(), ...SERVICE_MODELS];
-  res.type('text/plain').send(`# ${config.providerName}\n\nStandard OpenAI-compatible chat completions API. Payment via DRAIN protocol.\n\n## Services\n\n- POST /research - Research provider (query)\n- POST /document - Document analysis (PDF multipart)\n- POST /extract - Data extraction (url)\n\n## Request Format\n\nPOST /v1/chat/completions\nHeader: X-DRAIN-Voucher (required)\n\n{\n  "model": "<model-id>",\n  "messages": [{"role": "user", "content": "Your message"}],\n  "stream": false\n}\n\n## Available Models (${models.length})\n\n${models.join('\n')}\n\n## Pricing\n\nGET /v1/pricing for per-model token pricing.\n`);
+  res.type('text/plain').send(`# ${config.providerName}\n\nStandard OpenAI-compatible chat completions API. Payment via DRAIN protocol.\n\n## Services\n\n- POST /v1/research - Research provider (query)\n- POST /v1/document - Document analysis (PDF multipart)\n- POST /v1/extract - Data extraction (url)\n\n## Request Format\n\nPOST /v1/chat/completions\nHeader: X-DRAIN-Voucher (required)\n\n{\n  "model": "<model-id>",\n  "messages": [{"role": "user", "content": "Your message"}],\n  "stream": false\n}\n\n## Available Models (${models.length})\n\n${models.join('\n')}\n\n## Pricing\n\nGET /v1/pricing for per-model token pricing.\n`);
 });
 
 /**

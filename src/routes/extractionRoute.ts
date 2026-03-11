@@ -1,6 +1,6 @@
 /**
  * Data Extraction Provider Route
- * POST /extract (requires X-DRAIN-Voucher)
+ * POST /v1/extract (requires X-DRAIN-Voucher)
  * Inline auth logic: voucher check → parse → estimate → validate
  */
 

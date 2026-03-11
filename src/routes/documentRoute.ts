@@ -1,6 +1,6 @@
 /**
  * Document Analysis Provider Route
- * POST /document (multipart/form-data, requires X-DRAIN-Voucher)
+ * POST /v1/document (multipart/form-data, requires X-DRAIN-Voucher)
  * Inline auth logic: voucher check → parse → estimate → validate
  */
 

@@ -28,7 +28,7 @@ export const SERVICE_METADATA = [
     id: 'research',
     name: 'AI Research',
     description: 'AI-powered research queries',
-    route: '/research',
+    route: '/v1/research',
     method: 'POST' as const,
     inputSchema: { query: 'string' },
     outputSchema: {
@@ -44,7 +44,7 @@ export const SERVICE_METADATA = [
     id: 'document',
     name: 'Document Analysis',
     description: 'Analyzes PDF documents and extracts insights',
-    route: '/document',
+    route: '/v1/document',
     method: 'POST' as const,
     inputSchema: { file: 'binary (multipart/form-data)' },
     outputSchema: {
@@ -59,7 +59,7 @@ export const SERVICE_METADATA = [
     id: 'extract',
     name: 'Data Extraction',
     description: 'Extracts structured data from web pages (static and JS-rendered)',
-    route: '/extract',
+    route: '/v1/extract',
     method: 'POST' as const,
     inputSchema: { url: 'string (https URL)' },
     outputSchema: {

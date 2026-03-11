@@ -96,7 +96,7 @@ const options: swaggerJsdoc.Options = {
     },
     security: [{ DrainVoucher: [] }],
     paths: {
-      '/research': {
+      '/v1/research': {
         post: {
           summary: 'AI research query',
           description: 'Runs a research prompt using OpenAI models. Requires X-DRAIN-Voucher header.',
@@ -117,7 +117,7 @@ const options: swaggerJsdoc.Options = {
           },
         },
       },
-      '/document': {
+      '/v1/document': {
         post: {
           summary: 'Document analysis',
           description: 'Analyzes PDF document and extracts insights. Requires X-DRAIN-Voucher header. Send as multipart/form-data with file field.',
@@ -144,7 +144,7 @@ const options: swaggerJsdoc.Options = {
           },
         },
       },
-      '/extract': {
+      '/v1/extract': {
         post: {
           summary: 'Web page extraction',
           description: 'Extracts structured data from a URL. Supports static and JavaScript-rendered pages. Requires X-DRAIN-Voucher header.',

@@ -1,6 +1,6 @@
 /**
  * Research Provider Route
- * POST /research (requires X-DRAIN-Voucher)
+ * POST /v1/research (requires X-DRAIN-Voucher)
  * Inline auth logic: voucher check → parse → estimate → validate
  */
 
