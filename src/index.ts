@@ -4,7 +4,6 @@
  */
 
 import express from 'express';
-import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import OpenAI from 'openai';
 import { loadConfig, calculateCost, getModelPricing, isModelSupported, getSupportedModels, loadModels } from './config.js';
@@ -38,16 +37,6 @@ const openai = new OpenAI({
 
 // Create Express app
 const app = express();
-app.use(
-  cors({
-    origin: [
-      'http://localhost:8080',
-      'http://127.0.0.1:8080',
-      ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : []),
-    ].filter(Boolean),
-    credentials: true,
-  })
-);
 app.use(express.json({ limit: '2mb' }));
 
 const limiter = rateLimit({
