@@ -112,8 +112,61 @@ app.get('/services', (_req, res) => {
 });
 
 app.get('/v1/docs', (req, res) => {
-  const models = [...getSupportedModels(), ...SERVICE_MODELS];
-  res.type('text/plain').send(`# ${config.providerName}\n\nStandard OpenAI-compatible chat completions API. Payment via DRAIN protocol.\n\n## Services\n\n- POST /v1/research - Research provider (query)\n- POST /v1/document - Document analysis (PDF multipart)\n- POST /v1/extract - Data extraction (url)\n\n## Request Format\n\nPOST /v1/chat/completions\nHeader: X-DRAIN-Voucher (required)\n\n{\n  "model": "<model-id>",\n  "messages": [{"role": "user", "content": "Your message"}],\n  "stream": false\n}\n\n## Available Models (${models.length})\n\n${models.join('\n')}\n\n## Pricing\n\nGET /v1/pricing for per-model token pricing.\n`);
+  const models = [...SERVICE_MODELS, ...getSupportedModels()];
+  res.type('text/plain').send(
+    `# ${config.providerName}
+
+Standard OpenAI-compatible chat completions API. Payment via DRAIN protocol.
+All endpoints require X-DRAIN-Voucher header.
+
+## Services
+
+- POST /v1/research - AI research (query)
+- POST /v1/document - Document analysis (PDF multipart)
+- POST /v1/extract - Data extraction (url)
+
+## Request Formats
+
+### POST /v1/chat/completions
+Content-Type: application/json
+Header: X-DRAIN-Voucher (required)
+
+{
+  "model": "<model-id>",
+  "messages": [{"role": "user", "content": "Your message"}],
+  "stream": false
+}
+
+### POST /v1/research
+Content-Type: application/json
+Header: X-DRAIN-Voucher (required)
+
+{
+  "query": "Your research question"
+}
+
+### POST /v1/document
+Content-Type: multipart/form-data
+Header: X-DRAIN-Voucher (required)
+
+file: <PDF binary>
+
+### POST /v1/extract
+Content-Type: application/json
+Header: X-DRAIN-Voucher (required)
+
+{
+  "url": "https://example.com"
+}
+
+## Available Models (${models.length})
+
+${models.join('\n')}
+
+## Pricing
+
+GET /v1/pricing for per-model token pricing.`
+  );
 });
 
 /**
