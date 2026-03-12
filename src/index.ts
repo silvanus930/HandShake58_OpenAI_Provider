@@ -95,6 +95,10 @@ app.get('/metadata', (_req, res) => {
     pricing: 'dynamic',
     documentation: '/docs',
     health: '/health',
+    contactEmail: "silvanus930@outlook.com",
+    website: "https://www.handshake58.com",
+    logoUrl: "https://avatars.githubusercontent.com/u/14957082?s=200&v=4",
+    description: "Standard OpenAI-compatible chat completions API. Payment via DRAIN protocol. All endpoints require X-DRAIN-Voucher header.",
   });
 });
 
