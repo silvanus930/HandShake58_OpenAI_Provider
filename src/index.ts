@@ -171,7 +171,7 @@ Header: X-DRAIN-Voucher (required)
 
 ## Available Models (${models.length})
 
-${models.join('\\n')}
+${models.map(m => `- ${m}`).join('\n')}
 
 ## Pricing
 
