@@ -120,6 +120,8 @@ app.get('/v1/docs', (req, res) => {
   res.type('text/plain').send(
     `# ${config.providerName}
 
+## Description
+
 Standard OpenAI-compatible chat completions API. Payment via DRAIN protocol.
 All endpoints require X-DRAIN-Voucher header.
 
@@ -165,11 +167,21 @@ Header: X-DRAIN-Voucher (required)
 
 ## Available Models (${models.length})
 
-${models.join('\n')}
+${models.join('\\n')}
 
 ## Pricing
 
-GET /v1/pricing for per-model token pricing.`
+GET /v1/pricing for per-model token pricing.
+
+## Contact Email
+- Email: silvanus930@outlook.com
+
+## Website
+https://www.handshake58.com
+
+## LogoUrl
+https://avatars.githubusercontent.com/u/14957082?s=200&v=4
+`
   );
 });
 
