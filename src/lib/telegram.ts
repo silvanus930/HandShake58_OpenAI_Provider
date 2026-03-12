@@ -33,6 +33,12 @@ interface VisitEvent {
   ip: string;
 }
 
+interface BadUrlEvent {
+  method: string;
+  path: string;
+  ip: string;
+}
+
 let botToken: string | null = null;
 let chatId: string | null = null;
 let buffer: TrafficEvent[] = [];
@@ -40,6 +46,10 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 const visitBuffer: VisitEvent[] = [];
 let visitFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const badUrlBuffer: BadUrlEvent[] = [];
+let badUrlFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const BAD_URL_BATCH_INTERVAL_MS = 10_000; // 10 seconds
 
 export function initTelegram(): void {
   botToken = process.env.TELEGRAM_BOT_TOKEN ?? null;
@@ -96,6 +106,56 @@ export function notifyVisit(path: string, ip: string = 'unknown'): void {
     flushVisits();
   } else if (!visitFlushTimer) {
     visitFlushTimer = setTimeout(flushVisits, VISIT_BATCH_INTERVAL_MS);
+  }
+}
+
+export function notifyBadUrl(method: string, path: string, ip: string = 'unknown'): void {
+  if (!botToken || !chatId) return;
+
+  badUrlBuffer.push({ method, path, ip });
+
+  if (badUrlBuffer.length >= MAX_BATCH_SIZE) {
+    flushBadUrls();
+  } else if (!badUrlFlushTimer) {
+    badUrlFlushTimer = setTimeout(flushBadUrls, BAD_URL_BATCH_INTERVAL_MS);
+  }
+}
+
+async function flushBadUrls(): Promise<void> {
+  if (badUrlFlushTimer) {
+    clearTimeout(badUrlFlushTimer);
+    badUrlFlushTimer = null;
+  }
+  if (badUrlBuffer.length === 0) return;
+
+  const events = [...badUrlBuffer];
+  badUrlBuffer.length = 0;
+
+  const uniqueRequests = events.reduce((acc, e) => {
+    const key = `${e.method} ${e.path}`;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const requestSummary = Object.entries(uniqueRequests)
+    .map(([req, n]) => `\`${req}\` (${n})`)
+    .join('\n');
+  const ips = [...new Set(events.map((e) => e.ip))].join(', ');
+  const msg = `⚠️ *Bad URL* (${events.length} unmatched request${events.length > 1 ? 's' : ''})\n` +
+    `${requestSummary}\n` +
+    `🖥 ${ips}`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: msg,
+        parse_mode: 'Markdown',
+      }),
+    });
+  } catch (err) {
+    console.warn('[telegram] Bad URL notify failed:', err instanceof Error ? err.message : err);
   }
 }
 

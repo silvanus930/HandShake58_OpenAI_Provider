@@ -19,7 +19,7 @@ import { createExtractionRoute } from './routes/extractionRoute.js';
 import { createChatRoute } from './routes/chatRoute.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './docs/swagger.js';
-import { initTelegram, notifyStartup, notifyVisit, getClientIp } from './lib/telegram.js';
+import { initTelegram, notifyStartup, notifyVisit, notifyBadUrl, getClientIp } from './lib/telegram.js';
 
 // Load configuration
 const config = loadConfig();
@@ -363,6 +363,15 @@ app.post('/v1/admin/refresh-models', async (req, res) => {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+});
+
+/**
+ * Catch-all: unmatched routes (404)
+ * Notify via Telegram so you can monitor bad/unexpected requests
+ */
+app.use((req, res) => {
+  notifyBadUrl(req.method, req.path, getClientIp(req));
+  res.status(404).json({ error: 'Not found', path: req.path });
 });
 
 // Start server
