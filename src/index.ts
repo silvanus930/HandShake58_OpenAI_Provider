@@ -119,6 +119,20 @@ app.get('/services', (_req, res) => {
   });
 });
 
+app.get("/.well-known/provider.json", (req, res) => {
+
+  const models = [...SERVICE_MODELS, ...getSupportedModels()];
+
+  res.json({
+    name: "Silvanus-OpenAI",
+    description: "OpenAI compatible LLM provider running on Bittensor Subnet 58",
+    logoUrl: "https://avatars.githubusercontent.com/u/14957082?s=200&v=4",
+    website: "https://handshake58.com",
+    contactEmail: "miner1337000@gmail.com",
+    models: `${models.map(m => `- ${m}`).join('\n')}`
+  });
+});
+
 app.get('/v1/docs', (req, res) => {
   const models = [...SERVICE_MODELS, ...getSupportedModels()];
   res.type('text/plain').send(
